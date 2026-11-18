@@ -1,0 +1,149 @@
+x-evolution-global: &evolution-global dev-evolution-global
+x-evolution-token: &evolution-token dev-instance
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: atendente
+      POSTGRES_PASSWORD: atendente
+      POSTGRES_DB: atendente
+    ports:
+      # 5433 no host porque 5432 costuma estar ocupado por um Postgres local.
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atendente -d atendente"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  evolution-db:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: atendente
+    restart: "no"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        psql -h postgres -U atendente -d atendente -v ON_ERROR_STOP=1 <<'SQL'
+        SELECT 'CREATE DATABASE evogo_auth OWNER atendente'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'evogo_auth')\gexec
+        SELECT 'CREATE DATABASE evogo_users OWNER atendente'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'evogo_users')\gexec
+        SQL
+
+  evolution:
+    image: evoapicloud/evolution-go:0.7.3
+    depends_on:
+      evolution-db:
+        condition: service_completed_successfully
+    environment:
+      SERVER_PORT: 4000
+      CLIENT_NAME: atendente
+      GLOBAL_API_KEY: *evolution-global
+      POSTGRES_AUTH_DB: postgresql://atendente:atendente@postgres:5432/evogo_auth?sslmode=disable
+      POSTGRES_USERS_DB: postgresql://atendente:atendente@postgres:5432/evogo_users?sslmode=disable
+      DATABASE_SAVE_MESSAGES: "false"
+      CONNECT_ON_STARTUP: "false"
+      WEBHOOK_URL: http://api:3000/webhooks/evolution
+      WEBHOOK_FILES: "true"
+      EVENT_IGNORE_GROUP: "true"
+      EVENT_IGNORE_STATUS: "true"
+      WADEBUG: INFO
+      LOGTYPE: console
+    ports:
+      - "${EVOLUTION_PORT:-4000}:4000"
+    volumes:
+      - evolution_data:/app/dbdata
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4000/server/ok"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  evolution-bootstrap:
+    image: curlimages/curl:8.11.1
+    depends_on:
+      evolution:
+        condition: service_healthy
+    environment:
+      GLOBAL_API_KEY: *evolution-global
+      INSTANCE_TOKEN: *evolution-token
+      EVOLUTION_PORT: ${EVOLUTION_PORT:-4000}
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        base=http://evolution:4000
+        while true; do
+          code=$$(curl -s -o /tmp/status.json -w '%{http_code}' -H "apikey: $$INSTANCE_TOKEN" "$$base/instance/status" || true)
+          if grep -q LICENSE_REQUIRED /tmp/status.json; then
+            echo "EvolutionGo aguarda licença. Abra http://localhost:$$EVOLUTION_PORT/manager/login e entre com a GLOBAL_API_KEY."
+            sleep 15
+            continue
+          fi
+          break
+        done
+        if [ "$$code" != "200" ]; then
+          curl -sS -o /tmp/create.json -w '%{http_code}' -X POST "$$base/instance/create" \
+            -H "apikey: $$GLOBAL_API_KEY" \
+            -H "content-type: application/json" \
+            -d "{\"name\":\"atendente\",\"token\":\"$$INSTANCE_TOKEN\"}"
+          echo
+        fi
+        if ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"open"' /tmp/status.json; then
+          curl -fsS -X POST "$$base/instance/connect" \
+            -H "apikey: $$INSTANCE_TOKEN" \
+            -H "content-type: application/json" \
+            -d '{"webhookUrl":"http://api:3000/webhooks/evolution","subscribe":["MESSAGE"],"immediate":true}'
+          echo
+          echo "QR em http://localhost:$$EVOLUTION_PORT/instance/qr com o header apikey da instância."
+        fi
+
+  api:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://atendente:atendente@postgres:5432/atendente
+      REDIS_URL: redis://redis:6379
+      API_TOKEN: dev-token
+      EVOLUTION_BASE_URL: http://evolution:4000
+      EVOLUTION_API_KEY: *evolution-token
+      EVOLUTION_WEBHOOK_TOKEN: *evolution-token
+      ELEVENLABS_API_KEY: dev-eleven
+      OPENAI_API_KEY: dev-openai
+      PORT: 3000
+    ports:
+      - "${API_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/ready').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  evolution_data:

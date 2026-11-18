@@ -1,0 +1,477 @@
+openapi: 3.0.3
+info:
+  title: Atendente de WhatsApp
+  version: 0.1.0
+  description: |
+    API do operador e webhook do EvolutionGo. O frontend não faz parte deste
+    repositório. Todas as rotas do operador exigem `Authorization: Bearer`.
+servers:
+  - url: http://localhost:3000
+tags:
+  - name: sistema
+  - name: operador
+  - name: webhook
+paths:
+  /health:
+    get:
+      tags: [sistema]
+      summary: Processo no ar
+      security: []
+      responses:
+        "200":
+          description: O processo responde. Não consulta Postgres nem Redis.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /ready:
+    get:
+      tags: [sistema]
+      summary: Postgres e Redis respondem
+      security: []
+      responses:
+        "200":
+          description: As duas dependências responderam.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: Postgres ou Redis não respondeu.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /conversations:
+    get:
+      tags: [operador]
+      summary: Lista conversas da mais recente para a mais antiga
+      parameters:
+        - $ref: "#/components/parameters/limit30"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Página de conversas.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /conversations/{id}:
+    get:
+      tags: [operador]
+      summary: Conversa e as 20 tools mais recentes
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Conversa encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /conversations/{id}/messages:
+    get:
+      tags: [operador]
+      summary: Mensagens em ordem cronológica. O cursor pede a página mais antiga.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/limit50"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Página de mensagens, da mais antiga para a mais nova dentro da página.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessagePage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [operador]
+      summary: Enfileira uma mensagem do operador
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperatorMessageInput"
+      responses:
+        "202":
+          description: Mensagem gravada com status queued. O envio acontece no worker.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /conversations/{id}/tool-executions:
+    get:
+      tags: [operador]
+      summary: Tools da conversa, da mais recente para a mais antiga
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/limit50"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Página de execuções.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolExecutionPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /conversations/{id}/handoff:
+    post:
+      tags: [operador]
+      summary: Liga ou desliga o handoff
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HandoffInput"
+      responses:
+        "200":
+          description: Estado gravado. O mesmo valor atual também responde 200.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandoffState"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /webhooks/evolution:
+    post:
+      tags: [webhook]
+      summary: Recebe um evento do EvolutionGo
+      security: []
+      description: |
+        Não usa o token do operador. O corpo traz `instanceToken`, comparado a
+        `EVOLUTION_WEBHOOK_TOKEN`. Corpo válido responde 200 vazio e o trabalho
+        segue na fila. O JSON pode ter até 25 MB por causa do áudio em base64.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvolutionEnvelope"
+      responses:
+        "200":
+          description: Evento aceito. Corpo vazio.
+        "401":
+          description: instanceToken ausente ou diferente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Cursor opaco devolvido em nextCursor. Não interpretar.
+      schema:
+        type: string
+    limit30:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 30
+    limit50:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+  responses:
+    BadRequest:
+      description: Body, limit ou cursor inválido.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Bearer ausente ou diferente de API_TOKEN.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: unauthorized
+    NotFound:
+      description: UUID inválido ou conversa inexistente.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: não encontrado
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    Health:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          const: true
+    Conversation:
+      type: object
+      required: [id, phone, pushName, handoff, lastMessage, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        phone:
+          type: string
+          description: Só dígitos, com DDI.
+          example: "5511999999999"
+        pushName:
+          type: string
+          nullable: true
+        handoff:
+          type: boolean
+        lastMessage:
+          oneOf:
+            - $ref: "#/components/schemas/LastMessage"
+            - type: "null"
+        updatedAt:
+          type: string
+          format: date-time
+    LastMessage:
+      type: object
+      required: [body, author, createdAt]
+      properties:
+        body:
+          type: string
+        author:
+          $ref: "#/components/schemas/Author"
+        createdAt:
+          type: string
+          format: date-time
+    ConversationPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Conversation"
+        nextCursor:
+          type: string
+          nullable: true
+    ConversationDetail:
+      allOf:
+        - $ref: "#/components/schemas/Conversation"
+        - type: object
+          required: [createdAt, recentToolExecutions]
+          properties:
+            createdAt:
+              type: string
+              format: date-time
+            recentToolExecutions:
+              type: array
+              maxItems: 20
+              items:
+                $ref: "#/components/schemas/ToolExecution"
+    Message:
+      type: object
+      required: [id, direction, author, type, body, status, failureReason, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        direction:
+          type: string
+          enum: [inbound, outbound]
+        author:
+          $ref: "#/components/schemas/Author"
+        type:
+          type: string
+          enum: [text, audio, unsupported]
+        body:
+          type: string
+          description: Texto visível. Em áudio, é a transcrição. Em tipo não suportado, é o rótulo fixo.
+        status:
+          type: string
+          enum: [stored, queued, sent, failed]
+        failureReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    MessagePage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        nextCursor:
+          type: string
+          nullable: true
+    ToolExecution:
+      type: object
+      required: [id, messageId, name, arguments, result, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        messageId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        arguments:
+          type: object
+          additionalProperties: true
+        result:
+          description: JSON devolvido pela tool. Em erro, um objeto com a chave error.
+        status:
+          type: string
+          enum: [success, error]
+        createdAt:
+          type: string
+          format: date-time
+    ToolExecutionPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolExecution"
+        nextCursor:
+          type: string
+          nullable: true
+    Author:
+      type: string
+      enum: [customer, agent, operator]
+    OperatorMessageInput:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: O servidor aplica trim antes de validar o tamanho.
+    HandoffInput:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+    HandoffState:
+      type: object
+      required: [id, handoff]
+      properties:
+        id:
+          type: string
+          format: uuid
+        handoff:
+          type: boolean
+    EvolutionEnvelope:
+      type: object
+      required: [instanceToken]
+      properties:
+        event:
+          type: string
+          description: Só `Message` é processado. Os demais são descartados depois do 200.
+          example: Message
+        instanceToken:
+          type: string
+        data:
+          type: object
+          properties:
+            Info:
+              type: object
+              properties:
+                ID:
+                  type: string
+                IsFromMe:
+                  type: boolean
+                IsGroup:
+                  type: boolean
+                PushName:
+                  type: string
+                MediaType:
+                  type: string
+                Timestamp:
+                  type: string
+                  format: date-time
+                Chat:
+                  description: JID em string ou objeto com User e Server.
+            Message:
+              type: object
+              properties:
+                conversation:
+                  type: string
+                extendedTextMessage:
+                  type: object
+                  properties:
+                    text:
+                      type: string
+                base64:
+                  type: string
+                  description: Áudio em base64. Não é persistido.
+                mediaUrl:
+                  type: string
+                audioMessage:
+                  type: object
+security:
+  - bearerAuth: []
