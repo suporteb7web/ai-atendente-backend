@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: atendente
+      POSTGRES_PASSWORD: atendente
+      POSTGRES_DB: atendente
+    ports:
+      # 5433 no host porque 5432 costuma estar ocupado por um Postgres local.
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atendente -d atendente"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://atendente:atendente@postgres:5432/atendente
+      REDIS_URL: redis://redis:6379
+      API_TOKEN: dev-token
+      EVOLUTION_BASE_URL: http://evolution.invalid
+      EVOLUTION_API_KEY: dev-evolution
+      EVOLUTION_WEBHOOK_TOKEN: dev-webhook
+      ELEVENLABS_API_KEY: dev-eleven
+      OPENAI_API_KEY: dev-openai
+      PORT: 3000
+    ports:
+      - "${API_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/ready').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 30
