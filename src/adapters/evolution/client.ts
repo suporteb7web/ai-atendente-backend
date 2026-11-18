@@ -31,6 +31,11 @@ export class EvolutionClient implements MessagingPort {
 
 function readMessageId(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
-  const messageId = (payload as { messageId?: unknown }).messageId;
+  const record = payload as { messageId?: unknown; data?: unknown };
+  const nested =
+    record.data && typeof record.data === "object"
+      ? (record.data as { messageId?: unknown }).messageId
+      : undefined;
+  const messageId = typeof record.messageId === "string" ? record.messageId : nested;
   return typeof messageId === "string" && messageId.length > 0 ? messageId : null;
 }

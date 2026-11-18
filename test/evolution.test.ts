@@ -19,6 +19,14 @@ describe("EvolutionClient", () => {
     expect(JSON.parse(String(init?.body))).toEqual({ number: "5511999999999", text: "olá" });
   });
 
+  it("lê messageId dentro de data, que é o envelope do EvolutionGo", async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify({ message: "success", data: { messageId: "3EB0", status: "sent" } }), { status: 200 }),
+    );
+    const client = new EvolutionClient({ baseUrl: "http://evolution.test", apiKey: "segredo", fetchImpl });
+    await expect(client.sendText("5511999999999", "olá")).resolves.toBe("3EB0");
+  });
+
   it("falha sem gravar o corpo quando a API recusa", async () => {
     const fetchImpl = vi.fn(async () => new Response("segredo do provedor", { status: 500 }));
     const client = new EvolutionClient({ baseUrl: "http://evolution.test", apiKey: "k", fetchImpl });
