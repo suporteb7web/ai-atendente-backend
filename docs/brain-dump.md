@@ -8,10 +8,10 @@ Tech:
 - Express + Typescript
 - EvolutionGo
 - OpenAPI
-- Google ADK
+- Google ADK com OpenAI, modelo gpt-6-luna
 - PostgreSQL
 - DrizzleORM
-- ElevenLabs (transcrição de áudio)
+- ElevenLabs (transcrição de áudio, scribe_v4_turbo)
 
 Arquitetura:
 - Controllers e Services
