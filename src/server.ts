@@ -47,6 +47,7 @@ const agent = new AdkAgent({
   apiKey: config.openAiApiKey,
   model: config.openAiModel,
   maxToolRounds: config.agentMaxToolRounds,
+  reasoningEffort: config.openAiReasoningEffort,
 });
 
 const inboundQueue = createInboundQueue(queueRedis);
