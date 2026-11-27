@@ -37,6 +37,7 @@ export class OpenAiLlm extends BaseLlm {
     private readonly options: {
       model: string;
       apiKey: string;
+      reasoningEffort?: string;
       fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
     },
   ) {
@@ -53,6 +54,7 @@ export class OpenAiLlm extends BaseLlm {
       model,
       messages: toMessages(llmRequest),
     };
+    if (this.options.reasoningEffort) body.reasoning_effort = this.options.reasoningEffort;
     const tools = toTools(llmRequest);
     if (tools.length > 0) body.tools = tools;
 
@@ -170,6 +172,21 @@ function toContent(message: OpenAiMessage): LlmResponse["content"] {
   return { role: "model", parts };
 }
 
+// O ADK serializa estes limites como string ("1"), mas o JSON Schema da OpenAI exige número.
+const NUMERIC_KEYWORDS = new Set([
+  "minLength",
+  "maxLength",
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "multipleOf",
+  "minItems",
+  "maxItems",
+  "minProperties",
+  "maxProperties",
+]);
+
 function toOpenAiSchema(schema: unknown): Record<string, unknown> {
   if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
     return { type: "object", properties: {} };
@@ -189,6 +206,10 @@ function toOpenAiSchema(schema: unknown): Record<string, unknown> {
     }
     if (key === "items") {
       output.items = toOpenAiSchema(value);
+      continue;
+    }
+    if (NUMERIC_KEYWORDS.has(key) && typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
+      output[key] = Number(value);
       continue;
     }
     output[key] = value;

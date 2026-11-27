@@ -31,9 +31,10 @@ export class AdkAgent implements AgentPort {
       apiKey: string;
       model: string;
       maxToolRounds: number;
+      reasoningEffort?: string;
     },
   ) {
-    this.llm = new OpenAiLlm({ apiKey: options.apiKey, model: options.model });
+    this.llm = new OpenAiLlm({ apiKey: options.apiKey, model: options.model, reasoningEffort: options.reasoningEffort });
   }
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
@@ -119,17 +120,22 @@ export class AdkAgent implements AgentPort {
       }
       const last = input.history[input.history.length - 1]!;
       let text = "";
+      let modelFailed = false;
       for await (const event of runner.runAsync({
         userId: input.phone,
         sessionId: session.id,
         newMessage: { role: "user", parts: [{ text: last.body }] },
         runConfig: { maxLlmCalls: this.options.maxToolRounds + 1 },
       })) {
+        // Se a chamada ao modelo lança, o ADK não propaga: devolve um evento com errorCode.
+        // Sem isto a falha virava "texto vazio" e a mensagem do cliente ficava sem resposta e sem aviso.
+        if (event.errorCode || event.errorMessage) modelFailed = true;
         if (event.author === AGENT_NAME && isFinalResponse(event)) {
           const next = eventText(event);
           if (next) text = next;
         }
       }
+      if (modelFailed && !exceeded) throw new Error("openai falhou");
       return {
         text: exceeded ? "" : text,
         toolCalls,

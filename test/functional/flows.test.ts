@@ -4,7 +4,7 @@ import { createApp } from "../../src/app.js";
 import { runInbound, runOutbound } from "../../src/modules/pipeline/inbound.js";
 import type { InboundDeps } from "../../src/modules/pipeline/inbound.js";
 import type { MessagingPort } from "../../src/ports.js";
-import { FakeAgent, testConfig, TOKEN, WEBHOOK_TOKEN, textEnvelope } from "../helpers.js";
+import { FakeAgent, FakeWhatsapp, testConfig, TOKEN, WEBHOOK_TOKEN, textEnvelope } from "../helpers.js";
 import { createMemoryStore } from "../memory-store.js";
 
 function createFlow() {
@@ -31,6 +31,7 @@ function createFlow() {
   const app = createApp({
     config: testConfig(),
     operator: { ...store, enqueueOutbound: deps.enqueueOutbound },
+    whatsapp: new FakeWhatsapp(),
     enqueueInbound: async (envelope) => {
       await runInbound(deps, envelope, { attempt: 1, maxAttempts: 3 });
     },
@@ -50,6 +51,7 @@ describe("fluxos funcionais", () => {
     const down = createApp({
       config: testConfig(),
       operator: { ...createMemoryStore(), enqueueOutbound: async () => undefined },
+      whatsapp: new FakeWhatsapp(),
       enqueueInbound: async () => undefined,
       checkReady: async () => false,
     });

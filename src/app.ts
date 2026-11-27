@@ -1,7 +1,9 @@
 import express, { type ErrorRequestHandler, type Express } from "express";
 import type { AppConfig } from "./config.js";
+import type { WhatsappConnectionPort } from "./ports.js";
 import { HttpError } from "./http/validate.js";
 import { logger } from "./logger.js";
+import { registerWhatsappRoutes } from "./modules/whatsapp/controller.js";
 import { registerOperatorRoutes } from "./modules/operator/controller.js";
 import type { OperatorDeps } from "./modules/operator/service.js";
 import { createWebhookHandler } from "./modules/webhook/controller.js";
@@ -9,6 +11,7 @@ import { createWebhookHandler } from "./modules/webhook/controller.js";
 export interface AppDeps {
   config: AppConfig;
   operator: OperatorDeps;
+  whatsapp: WhatsappConnectionPort;
   enqueueInbound: (envelope: unknown) => Promise<void>;
   checkReady: () => Promise<boolean>;
 }
@@ -53,6 +56,7 @@ export function createApp(deps: AppDeps): Express {
   );
 
   registerOperatorRoutes(app, deps.config.apiToken, deps.operator);
+  registerWhatsappRoutes(app, deps.config.apiToken, deps.whatsapp);
 
   app.use((_req, res) => {
     res.status(404).json({ error: "não encontrado" });

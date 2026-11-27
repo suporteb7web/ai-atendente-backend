@@ -10,6 +10,7 @@ servers:
 tags:
   - name: sistema
   - name: operador
+  - name: whatsapp
   - name: webhook
 paths:
   /health:
@@ -168,6 +169,143 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+  /whatsapp:
+    get:
+      tags: [whatsapp]
+      summary: Estado da conexão do número de WhatsApp
+      description: |
+        O projeto é single-tenant: uma instância do EvolutionGo, um número. Faça polling aqui
+        (3 s basta) para saber em que passo da conexão o painel está.
+      responses:
+        "200":
+          description: Estado atual.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsappState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /whatsapp/connect:
+    post:
+      tags: [whatsapp]
+      summary: Cria a instância (se faltar) e começa a gerar o QR
+      responses:
+        "200":
+          description: Conexão iniciada. Leia o QR em GET /whatsapp/qr.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsappState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: A licença do EvolutionGo ainda não foi ativada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: O EvolutionGo não respondeu ou recusou.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /whatsapp/qr:
+    get:
+      tags: [whatsapp]
+      summary: QR code para parear o número
+      responses:
+        "200":
+          description: "`qrcode` é um data URL PNG, ou null enquanto não há QR ou se já estiver conectado."
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [qrcode]
+                properties:
+                  qrcode:
+                    type: string
+                    nullable: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /whatsapp/disconnect:
+    post:
+      tags: [whatsapp]
+      summary: Desconecta o número (logout) ou cancela um QR pendente
+      responses:
+        "200":
+          description: Estado depois de desconectar.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsappState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /whatsapp/license:
+    get:
+      tags: [whatsapp]
+      summary: Link de cadastro da licença do EvolutionGo
+      description: |
+        O EvolutionGo só funciona com licença ativada. O cadastro acontece no site do provedor,
+        que volta para `redirectUri?code=...`. Depois use POST /whatsapp/license com esse code.
+      parameters:
+        - name: redirectUri
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+      responses:
+        "200":
+          description: Link para abrir no navegador.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [registerUrl]
+                properties:
+                  registerUrl:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          description: O EvolutionGo não devolveu o link.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags: [whatsapp]
+      summary: Ativa a licença com o code devolvido pelo provedor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+      responses:
+        "200":
+          description: Licença ativada. Devolve o novo estado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsappState"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          description: O EvolutionGo não conseguiu ativar.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /webhooks/evolution:
     post:
       tags: [webhook]
@@ -425,6 +563,25 @@ components:
           format: uuid
         handoff:
           type: boolean
+    WhatsappState:
+      type: object
+      required: [status, name, phone]
+      properties:
+        status:
+          type: string
+          enum: [unavailable, license_required, not_created, disconnected, connecting, connected]
+          description: |
+            unavailable: EvolutionGo fora do ar. license_required: licença não ativada.
+            not_created: instância ainda não existe. disconnected: sem sessão. connecting:
+            aguardando o QR. connected: número pareado.
+        name:
+          type: string
+          nullable: true
+          description: Nome do perfil do WhatsApp conectado.
+        phone:
+          type: string
+          nullable: true
+          description: Só dígitos, com DDI. Precisa de EVOLUTION_GLOBAL_API_KEY.
     EvolutionEnvelope:
       type: object
       required: [instanceToken]

@@ -12,10 +12,14 @@ export interface AppConfig {
   evolutionBaseUrl: string;
   evolutionApiKey: string;
   evolutionWebhookToken: string;
+  evolutionGlobalApiKey: string;
+  evolutionInstanceName: string;
+  evolutionWebhookUrl: string;
   elevenLabsApiKey: string;
   openAiApiKey: string;
   port: number;
   openAiModel: string;
+  openAiReasoningEffort: string;
   elevenLabsSttModel: string;
   elevenLabsLanguageCode: string;
   agentHistoryLimit: number;
@@ -49,11 +53,16 @@ export function parseConfig(env: Env): AppConfig {
     evolutionBaseUrl: stripTrailingSlash(env.EVOLUTION_BASE_URL!.trim()),
     evolutionApiKey: env.EVOLUTION_API_KEY!.trim(),
     evolutionWebhookToken: env.EVOLUTION_WEBHOOK_TOKEN!.trim(),
+    evolutionGlobalApiKey: env.EVOLUTION_GLOBAL_API_KEY?.trim() ?? "",
+    evolutionInstanceName: env.EVOLUTION_INSTANCE_NAME?.trim() || "atendente",
+    evolutionWebhookUrl: env.EVOLUTION_WEBHOOK_URL?.trim() || "http://api:3000/webhooks/evolution",
     elevenLabsApiKey: env.ELEVENLABS_API_KEY!.trim(),
     openAiApiKey: env.OPENAI_API_KEY!.trim(),
     port: positiveInt(env.PORT, "PORT", 3000),
     openAiModel: env.OPENAI_MODEL?.trim() || "gpt-6-luna",
-    elevenLabsSttModel: env.ELEVENLABS_STT_MODEL?.trim() || "scribe_v4_turbo",
+    // gpt-6-luna só aceita tools em chat/completions com reasoning_effort "none".
+    openAiReasoningEffort: env.OPENAI_REASONING_EFFORT?.trim() || "none",
+    elevenLabsSttModel: env.ELEVENLABS_STT_MODEL?.trim() || "scribe_v3",
     elevenLabsLanguageCode: env.ELEVENLABS_LANGUAGE_CODE?.trim() || "por",
     agentHistoryLimit: positiveInt(env.AGENT_HISTORY_LIMIT, "AGENT_HISTORY_LIMIT", 40),
     agentMaxToolRounds: positiveInt(env.AGENT_MAX_TOOL_ROUNDS, "AGENT_MAX_TOOL_ROUNDS", 5),

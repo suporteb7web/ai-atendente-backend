@@ -119,4 +119,67 @@ describe("AdkAgent", () => {
       vi.unstubAllGlobals();
     }
   });
+  it("manda limites do schema das tools como número, não como string (a OpenAI recusa \"1\")", async () => {
+    const bodies: Array<{ tools: Array<{ function: { name: string; parameters: { properties: Record<string, Record<string, unknown>> } } }> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return jsonResponse({ role: "assistant", content: "oi" });
+      }),
+    );
+    try {
+      const agent = new AdkAgent({ apiKey: "sk-test", model: "gpt-6-luna", maxToolRounds: 5 });
+      await agent.run({
+        conversationId: "11111111-1111-4111-8111-111111111111",
+        phone: "5511999999999",
+        history: [{ author: "customer", body: "oi" }],
+      });
+      const handoff = bodies[0]!.tools.find((tool) => tool.function.name === "request_handoff")!;
+      expect(handoff.function.parameters.properties.reason?.minLength).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("envia reasoning_effort quando configurado (gpt-6-luna exige none com tools)", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return jsonResponse({ role: "assistant", content: "oi" });
+      }),
+    );
+    try {
+      const agent = new AdkAgent({ apiKey: "sk-test", model: "gpt-6-luna", maxToolRounds: 5, reasoningEffort: "none" });
+      await agent.run({
+        conversationId: "11111111-1111-4111-8111-111111111111",
+        phone: "5511999999999",
+        history: [{ author: "customer", body: "oi" }],
+      });
+      expect(bodies[0]!.reasoning_effort).toBe("none");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("falha da OpenAI vira erro em vez de resposta vazia silenciosa", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: { message: "segredo" } }), { status: 400 })),
+    );
+    try {
+      const agent = new AdkAgent({ apiKey: "sk-test", model: "gpt-6-luna", maxToolRounds: 5 });
+      await expect(
+        agent.run({
+          conversationId: "11111111-1111-4111-8111-111111111111",
+          phone: "5511999999999",
+          history: [{ author: "customer", body: "oi" }],
+        }),
+      ).rejects.toThrow("openai falhou");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

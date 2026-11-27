@@ -2,6 +2,7 @@ import type { Server } from "node:http";
 import { AdkAgent } from "./adapters/agent/adk-agent.js";
 import { ElevenLabsClient } from "./adapters/elevenlabs/client.js";
 import { EvolutionClient } from "./adapters/evolution/client.js";
+import { EvolutionConnection } from "./adapters/evolution/connection.js";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { createDatabase, postgresReady } from "./db/client.js";
@@ -30,6 +31,13 @@ const messaging = new EvolutionClient({
   baseUrl: config.evolutionBaseUrl,
   apiKey: config.evolutionApiKey,
 });
+const whatsapp = new EvolutionConnection({
+  baseUrl: config.evolutionBaseUrl,
+  instanceToken: config.evolutionApiKey,
+  globalApiKey: config.evolutionGlobalApiKey || undefined,
+  instanceName: config.evolutionInstanceName,
+  webhookUrl: config.evolutionWebhookUrl,
+});
 const transcription = new ElevenLabsClient({
   apiKey: config.elevenLabsApiKey,
   model: config.elevenLabsSttModel,
@@ -39,6 +47,7 @@ const agent = new AdkAgent({
   apiKey: config.openAiApiKey,
   model: config.openAiModel,
   maxToolRounds: config.agentMaxToolRounds,
+  reasoningEffort: config.openAiReasoningEffort,
 });
 
 const inboundQueue = createInboundQueue(queueRedis);
@@ -80,6 +89,7 @@ const app = createApp({
     toolExecutions,
     enqueueOutbound: pipelineDeps.enqueueOutbound,
   },
+  whatsapp,
   enqueueInbound: async (envelope) => {
     await inboundQueue.add("inbound", { envelope });
   },
