@@ -128,8 +128,13 @@ services:
       EVOLUTION_BASE_URL: http://evolution:4000
       EVOLUTION_API_KEY: *evolution-token
       EVOLUTION_WEBHOOK_TOKEN: *evolution-token
-      ELEVENLABS_API_KEY: dev-eleven
-      OPENAI_API_KEY: dev-openai
+      # Usadas pelas rotas /whatsapp para criar a instância e conectar pelo painel.
+      EVOLUTION_GLOBAL_API_KEY: *evolution-global
+      EVOLUTION_INSTANCE_NAME: atendente
+      EVOLUTION_WEBHOOK_URL: http://api:3000/webhooks/evolution
+      # Chaves reais vêm do .env (o Compose lê o .env desta pasta); sem elas o agente não responde.
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-dev-eleven}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-dev-openai}
       PORT: 3000
     ports:
       - "${API_PORT:-3000}:3000"

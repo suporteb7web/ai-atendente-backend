@@ -1,6 +1,12 @@
 import { parseConfig, type AppConfig } from "../src/config.js";
 import { createApp } from "../src/app.js";
-import type { AgentPort, AgentRunInput, AgentRunResult } from "../src/ports.js";
+import type {
+  AgentPort,
+  AgentRunInput,
+  AgentRunResult,
+  WhatsappConnectionPort,
+  WhatsappState,
+} from "../src/ports.js";
 import { createMemoryStore } from "./memory-store.js";
 
 export const TOKEN = "operator-token";
@@ -22,13 +28,49 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   };
 }
 
+export class FakeWhatsapp implements WhatsappConnectionPort {
+  state: WhatsappState = { status: "disconnected", name: null, phone: null };
+  qr: string | null = null;
+  calls: string[] = [];
+  failWith: Error | null = null;
+
+  private record(call: string) {
+    this.calls.push(call);
+    if (this.failWith) throw this.failWith;
+  }
+  async getState() {
+    return this.state;
+  }
+  async connect() {
+    this.record("connect");
+    this.state = { status: "connecting", name: null, phone: null };
+  }
+  async getQr() {
+    return this.qr;
+  }
+  async disconnect() {
+    this.record("disconnect");
+    this.state = { status: "disconnected", name: null, phone: null };
+  }
+  async getLicenseRegisterUrl(redirectUri: string) {
+    this.record(`register:${redirectUri}`);
+    return `https://license.test/register?redirect_uri=${encodeURIComponent(redirectUri)}`;
+  }
+  async activateLicense(code: string) {
+    this.record(`activate:${code}`);
+    this.state = { status: "not_created", name: null, phone: null };
+  }
+}
+
 export function createTestApp(options?: { ready?: boolean }) {
   const store = createMemoryStore();
   const outbound: string[] = [];
   const inbound: unknown[] = [];
   const config = testConfig();
+  const whatsapp = new FakeWhatsapp();
   const app = createApp({
     config,
+    whatsapp,
     operator: {
       ...store,
       enqueueOutbound: async (messageId) => {
@@ -40,7 +82,7 @@ export function createTestApp(options?: { ready?: boolean }) {
     },
     checkReady: async () => options?.ready ?? true,
   });
-  return { app, store, outbound, inbound, token: TOKEN, webhookToken: WEBHOOK_TOKEN };
+  return { app, store, outbound, inbound, whatsapp, token: TOKEN, webhookToken: WEBHOOK_TOKEN };
 }
 
 export class FakeAgent implements AgentPort {

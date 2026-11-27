@@ -12,6 +12,9 @@ export interface AppConfig {
   evolutionBaseUrl: string;
   evolutionApiKey: string;
   evolutionWebhookToken: string;
+  evolutionGlobalApiKey: string;
+  evolutionInstanceName: string;
+  evolutionWebhookUrl: string;
   elevenLabsApiKey: string;
   openAiApiKey: string;
   port: number;
@@ -49,6 +52,9 @@ export function parseConfig(env: Env): AppConfig {
     evolutionBaseUrl: stripTrailingSlash(env.EVOLUTION_BASE_URL!.trim()),
     evolutionApiKey: env.EVOLUTION_API_KEY!.trim(),
     evolutionWebhookToken: env.EVOLUTION_WEBHOOK_TOKEN!.trim(),
+    evolutionGlobalApiKey: env.EVOLUTION_GLOBAL_API_KEY?.trim() ?? "",
+    evolutionInstanceName: env.EVOLUTION_INSTANCE_NAME?.trim() || "atendente",
+    evolutionWebhookUrl: env.EVOLUTION_WEBHOOK_URL?.trim() || "http://api:3000/webhooks/evolution",
     elevenLabsApiKey: env.ELEVENLABS_API_KEY!.trim(),
     openAiApiKey: env.OPENAI_API_KEY!.trim(),
     port: positiveInt(env.PORT, "PORT", 3000),
