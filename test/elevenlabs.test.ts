@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { ElevenLabsClient } from "../src/adapters/elevenlabs/client.js";
 
 describe("ElevenLabsClient", () => {
-  it("manda scribe_v4_turbo, idioma e o áudio, e usa o texto com trim", async () => {
+  it("manda scribe_v3, idioma e o áudio, e usa o texto com trim", async () => {
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
       const form = init?.body as FormData;
-      expect(form.get("model_id")).toBe("scribe_v4_turbo");
+      expect(form.get("model_id")).toBe("scribe_v3");
       expect(form.get("language_code")).toBe("por");
       expect(form.get("tag_audio_events")).toBe("false");
       expect(form.get("file")).toBeInstanceOf(Blob);
@@ -13,7 +13,7 @@ describe("ElevenLabsClient", () => {
     });
     const client = new ElevenLabsClient({
       apiKey: "xi-secret",
-      model: "scribe_v4_turbo",
+      model: "scribe_v3",
       languageCode: "por",
       fetchImpl,
     });
@@ -28,7 +28,7 @@ describe("ElevenLabsClient", () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ text: "   " }), { status: 200 }));
     const client = new ElevenLabsClient({
       apiKey: "k",
-      model: "scribe_v4_turbo",
+      model: "scribe_v3",
       languageCode: "por",
       fetchImpl,
     });

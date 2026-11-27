@@ -59,7 +59,7 @@ export function parseConfig(env: Env): AppConfig {
     openAiApiKey: env.OPENAI_API_KEY!.trim(),
     port: positiveInt(env.PORT, "PORT", 3000),
     openAiModel: env.OPENAI_MODEL?.trim() || "gpt-6-luna",
-    elevenLabsSttModel: env.ELEVENLABS_STT_MODEL?.trim() || "scribe_v4_turbo",
+    elevenLabsSttModel: env.ELEVENLABS_STT_MODEL?.trim() || "scribe_v3",
     elevenLabsLanguageCode: env.ELEVENLABS_LANGUAGE_CODE?.trim() || "por",
     agentHistoryLimit: positiveInt(env.AGENT_HISTORY_LIMIT, "AGENT_HISTORY_LIMIT", 40),
     agentMaxToolRounds: positiveInt(env.AGENT_MAX_TOOL_ROUNDS, "AGENT_MAX_TOOL_ROUNDS", 5),
